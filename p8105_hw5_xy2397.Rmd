@@ -32,36 +32,51 @@ Create a tidy dataframe containing data from all participants, including the sub
 •	Iterate over file names and read in data for each subject using purrr::map and saving the result as a new variable in the dataframe
 
 •	Tidy the result; manipulate file names to include control arm and subject ID, make sure weekly observations are “tidy”, and do any other tidying that’s necessary
+
 Make a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
 
 ```{r}
-#study = 
-  #tibble(file_name = list.files(path = "./data")) %>% 
-  #mutate(output = purrr::map( "./data/file_name", read_csv))
- 
+study = 
+  tibble(file_name = list.files(path = "./data/pro1")) %>% 
+  mutate(output = purrr::map(str_c("./data/pro1/", file_name), read_csv)) %>%
+  unnest() %>% 
+  mutate(file_name = str_replace(file_name, ".csv", "")) %>% 
+  separate(file_name, into = c("arm", "id"), sep = "_") %>% 
+  mutate(arm = str_replace(arm, "con", "control"),
+         arm = str_replace(arm, "exp", "experimental")) %>% 
+  gather(key = "week", value = "data", week_1:week_8) %>% 
+  mutate(week = str_replace(week, "week_", ""))
+  
 
 ```
 
 ```{r}
+study %>% 
+  ggplot(aes(x = week, y = data)) +
+  geom_point(aes(color = id)) +
+  geom_line(aes(group = id, color = id)) +
+  facet_grid(~arm) +
+  labs(
+    title = "Spaghetti plot",
+    x = "Week",
+    y = "Data"
+  ) + 
+  viridis::scale_color_viridis(
+    name = "Subject ID",
+    discrete = TRUE
+    ) 
 
-#data_import = function(path){
   
-#read_csv(file = path)
-  
-
-#}
-
-
-
-#output = purrr::map()
 ```
+
+
 
 
 ## Problem 2
 
 ```{r}
 homicide = 
-  read_csv(file = "./data/homicide-data.csv") %>% 
+  read_csv(file = "./data/pro2/homicide-data.csv") %>% 
   unite(city_state, city, state, sep = ",")
 ```
 
@@ -81,8 +96,7 @@ unsolved =
   filter(disposition %in% c("Closed without arrest", "Open/No arrest")) %>%
   group_by(city_state) %>% 
   summarize(number_unsolved = n()) %>% 
-  unnest() %>% 
-  filter(city_state == "Baltimore,MD")
+  unnest() 
   
 ```
 
@@ -143,7 +157,7 @@ proportion_test = function(city){
   broom::tidy(result) 
   
 }
-
+```
 output = 
   purrr::map(.x = unsolved$city_state, ~proportion_test(city = .x)) %>% 
   bind_rows() %>% 
@@ -155,7 +169,7 @@ output =
   unite(CIs, conf.low, conf.high, sep = ",")
   
   
-```
+
 
 ```{r}
 output = 

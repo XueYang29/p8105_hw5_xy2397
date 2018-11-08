@@ -35,31 +35,42 @@ Create a tidy dataframe containing data from all participants, including the sub
 
 Make a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
 
-```{r}
+```{r, message = FALSE}
 study = 
+  
+  # start with a dataframe containing all file names
   tibble(file_name = list.files(path = "./data/pro1")) %>% 
+  
+  # iterate over file names and read in data for each subject
   mutate(output = purrr::map(str_c("./data/pro1/", file_name), read_csv)) %>%
+  
+  # unnest the dataframe
   unnest() %>% 
+  
+  # separate the file name with arm and subject id
   mutate(file_name = str_replace(file_name, ".csv", "")) %>% 
-  separate(file_name, into = c("arm", "id"), sep = "_") %>% 
+  separate(file_name, into = c("arm", "subject_id"), sep = "_") %>% 
   mutate(arm = str_replace(arm, "con", "control"),
          arm = str_replace(arm, "exp", "experimental")) %>% 
-  gather(key = "week", value = "data", week_1:week_8) %>% 
-  mutate(week = str_replace(week, "week_", ""))
   
+  # gather the week and observations
+  gather(key = "week", value = "observation", week_1:week_8) %>% 
+  mutate(week = str_replace(week, "week_", "")) %>% 
+  arrange(subject_id)
+
 
 ```
 
 ```{r}
 study %>% 
-  ggplot(aes(x = week, y = data)) +
-  geom_point(aes(color = id)) +
-  geom_line(aes(group = id, color = id)) +
+  ggplot(aes(x = week, y = observation)) +
+  #geom_point(aes(color = subject_id)) +
+  geom_line(aes(group = subject_id, color = subject_id)) +
   facet_grid(~arm) +
   labs(
     title = "Spaghetti plot",
     x = "Week",
-    y = "Data"
+    y = "Observations"
   ) + 
   viridis::scale_color_viridis(
     name = "Subject ID",
@@ -69,21 +80,32 @@ study %>%
   
 ```
 
-
+By looking at the observations from spaghetti plot between control arm and experimental arm, we can find that there are increase trend on each subject over time in the observations form experimental arm but there aren't increase trend in control arm.
 
 
 ## Problem 2
 
-```{r}
+```{r, message = FALSE}
 homicide = 
-  read_csv(file = "./data/pro2/homicide-data.csv") %>% 
-  unite(city_state, city, state, sep = ",")
+  read_csv(file = "./data/pro2/homicide-data.csv") 
+  
 ```
 
-Describe the raw data. Create a city_state variable (e.g. “Baltimore, MD”) and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
+Describe the raw data
 
-The data is `r nrow(homicide)` rows x `r ncol(homicide)` columns.
+The data is `r nrow(homicide)` rows x `r ncol(homicide)` columns, which means that there are `r nrow(homicide)` observations of criminal homicides in 50 of the largest American cities. We are major interested in the variables like the location of criminal homicides (city and state) and disposition of the homicides (solved or unsolved).
 
+
+Create a city_state variable (e.g. “Baltimore, MD”) 
+
+```{r}
+homicide = 
+  homicide %>% 
+  # create a city_state variabl
+  unite(city_state, city, state, sep = ",") 
+```
+
+Summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
 ```{r}
 total = 
   homicide %>% 
@@ -97,13 +119,33 @@ unsolved =
   group_by(city_state) %>% 
   summarize(number_unsolved = n()) %>% 
   unnest() 
+```
+
+The following tables are the total number of homicides and the number of unsolved homicides within each city. 
+
+
+```{r}
+total %>% 
+  knitr::kable(digits = 3)
+
+unsolved %>% 
+  knitr::kable(digits = 3)
   
 ```
+
+Noticing that "Tulsa,AL" doesn't have unsolved homicides.
+
+```{r}
+homicide %>%   
+  filter(city_state == "Tulsa,AL") %>% 
+  knitr::kable(digits = 3)
+```
+
 
 For the city of Baltimore, MD, use the prop.test function to estimate the proportion of homicides that are unsolved; save the output of prop.test as an R object, apply the broom::tidy to this object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
 
 ```{r}
-# should be wriiten as a function
+# should be wriiten as a function?
 n =
   total %>% 
   filter(city_state == "Baltimore,MD") %>% 
@@ -141,6 +183,7 @@ Now run prop.test for each of the cities in your dataset, and extract both the p
 
 ```{r}
 # "Tulsa,AL" don't have unsolved homicides
+
 proportion_test = function(city){
   n =
   total %>% 
@@ -157,19 +200,10 @@ proportion_test = function(city){
   broom::tidy(result) 
   
 }
-```
-output = 
-  purrr::map(.x = unsolved$city_state, ~proportion_test(city = .x)) %>% 
-  bind_rows() %>% 
-  mutate(city_state = unsolved$city_state) %>% 
-  select(city_state,
-         estimated_proportion = estimate,
-         conf.low, 
-         conf.high) %>% 
-  unite(CIs, conf.low, conf.high, sep = ",")
-  
-  
 
+```
+
+Note that since the city "Tulsa,AL" don't have unsolved homicides, so when dealing with the proportion of unsolved homicides and the confidence interval for each, we only concentrate on the left 50 cities that contains both solved and unsolved homicides.
 
 ```{r}
 output = 
@@ -184,8 +218,10 @@ output =
 ```
 
 Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
+
 ```{r}
 output %>% 
+  # reorder the city as the increase of median of estimated_proportion
   mutate(city = forcats::fct_reorder(city, estimated_proportion)) %>% 
   ggplot(aes(x = city, y = estimated_proportion, color = city)) +
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +

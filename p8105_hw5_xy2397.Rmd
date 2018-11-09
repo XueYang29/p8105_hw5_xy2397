@@ -25,15 +25,8 @@ set.seed(1)
 ## Problem 1
 
 
-Create a tidy dataframe containing data from all participants, including the subject ID, arm, and observations over time:
+### Create a tidy dataframe 
 
-•	Start with a dataframe containing all file names; the list.files function will help
-
-•	Iterate over file names and read in data for each subject using purrr::map and saving the result as a new variable in the dataframe
-
-•	Tidy the result; manipulate file names to include control arm and subject ID, make sure weekly observations are “tidy”, and do any other tidying that’s necessary
-
-Make a spaghetti plot showing observations on each subject over time, and comment on differences between groups.
 
 ```{r, message = FALSE}
 study = 
@@ -55,16 +48,23 @@ study =
   
   # gather the week and observations
   gather(key = "week", value = "observation", week_1:week_8) %>% 
+  
+  # do some other tidy
   mutate(week = str_replace(week, "week_", "")) %>% 
   arrange(subject_id)
 
-
+study %>% 
+  head() %>% 
+  knitr::kable(digits = 3)
+  
 ```
 
+### Make a spaghetti plot
+
 ```{r}
+# a spaghetti plot showing observations on each subject over time
 study %>% 
   ggplot(aes(x = week, y = observation)) +
-  #geom_point(aes(color = subject_id)) +
   geom_line(aes(group = subject_id, color = subject_id)) +
   facet_grid(~arm) +
   labs(
@@ -80,21 +80,25 @@ study %>%
   
 ```
 
-By looking at the observations from spaghetti plot between control arm and experimental arm, we can find that there are increase trend on each subject over time in the observations form experimental arm but there aren't increase trend in control arm.
+### Comment on differences between groups
+
+By looking at the observations from spaghetti plot between control arm and experimental arm, we can find that there are significantly increasing trend on each subject over time in the observations form experimental arm but there aren't significantly increasing trend in control arm.
 
 
 ## Problem 2
 
 ```{r, message = FALSE}
+# load the data
 homicide = 
   read_csv(file = "./data/pro2/homicide-data.csv") 
-  
 ```
 
-Describe the raw data
+### Describe the raw data
 
-The data is `r nrow(homicide)` rows x `r ncol(homicide)` columns, which means that there are `r nrow(homicide)` observations of criminal homicides in 50 of the largest American cities. We are major interested in the variables like the location of criminal homicides (city and state) and disposition of the homicides (solved or unsolved).
+The data is `r nrow(homicide)` rows x `r ncol(homicide)` columns, which means that there are `r nrow(homicide)` observations of criminal homicides in `r length(unique(homicide$city))` of the largest American cities. We are major interested in the variables like the location of criminal homicides (city and state) and disposition of the homicides (solved or unsolved).
 
+
+### Summarize the data
 
 Create a city_state variable (e.g. “Baltimore, MD”) 
 
@@ -106,6 +110,7 @@ homicide =
 ```
 
 Summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
+
 ```{r}
 total = 
   homicide %>% 
@@ -133,35 +138,47 @@ unsolved %>%
   
 ```
 
-Noticing that "Tulsa,AL" doesn't have unsolved homicides.
+Noting that "Tulsa,AL" doesn't have unsolved homicides. There only exist one homicide report in "Tulsa,AL", which is solved. Also city "Tulsa" also exist in the state "OK", which contains 583 reports including solved and unsolved. It is a little bit weird. So for the following analysis, we delete the report in "Tulsa,AL" to make sure we can calculate the proportion of unsloved homicides in every city.
 
 ```{r}
 homicide %>%   
   filter(city_state == "Tulsa,AL") %>% 
+  select(uid, reported_date, city_state, disposition) %>% 
+  knitr::kable(digits = 3)
+
+homicide %>%   
+  count(city_state) %>% 
+  filter(city_state %in% c("Tulsa,AL", "Tulsa,OK")) %>% 
   knitr::kable(digits = 3)
 ```
 
+### Estimate the proportion of unsolved homicides
 
 For the city of Baltimore, MD, use the prop.test function to estimate the proportion of homicides that are unsolved; save the output of prop.test as an R object, apply the broom::tidy to this object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
 
 ```{r}
-# should be wriiten as a function?
+# total number of homicides
 n =
   total %>% 
   filter(city_state == "Baltimore,MD") %>% 
   pull(number)
 
+# number of unsolved homicides
 x =
   unsolved %>% 
   filter(city_state == "Baltimore,MD") %>% 
   pull(number_unsolved)
 
+# save the output of prop.test as an R object
 result = 
   prop.test(x, n, alternative = "two.sided") %>% 
   broom::tidy() 
 
+#  pull the estimated proportion and confidence intervals
 results = 
   tibble(
+    
+    city = "Baltimore,MD",
     
   estimated_proportion = 
     result %>% 
@@ -175,6 +192,9 @@ results =
     result %>% 
     pull(conf.high)
   )
+
+results %>% 
+  knitr::kable(digits = 3)
   
 ```
 
@@ -182,8 +202,8 @@ results =
 Now run prop.test for each of the cities in your dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. Do this within a “tidy” pipeline, making use of purrr::map, purrr::map2, list columns and unnest as necessary to create a tidy dataframe with estimated proportions and CIs for each city.
 
 ```{r}
-# "Tulsa,AL" don't have unsolved homicides
 
+# create a function to do the prop.test in each city
 proportion_test = function(city){
   n =
   total %>% 
@@ -201,11 +221,6 @@ proportion_test = function(city){
   
 }
 
-```
-
-Note that since the city "Tulsa,AL" don't have unsolved homicides, so when dealing with the proportion of unsolved homicides and the confidence interval for each, we only concentrate on the left 50 cities that contains both solved and unsolved homicides.
-
-```{r}
 output = 
   tibble(city = unsolved$city_state) %>% 
   mutate(estimate = purrr::map(.x = unsolved$city_state, ~proportion_test(city = .x))) %>%
@@ -213,9 +228,16 @@ output =
   select(city,
          estimated_proportion = estimate,
          conf.low, 
-         conf.high) 
- # unite(CIs, conf.low, conf.high, sep = ",")
+         conf.high)
+
+output %>% 
+  knitr::kable(digits = 3)
+
 ```
+
+As what we discussed above, since the city "Tulsa,AL" don't have unsolved homicides, so when dealing with the proportion of unsolved homicides and the confidence interval for each, we only concentrate on the left 50 cities that contains both solved and unsolved homicides.
+
+### Create a plot
 
 Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
 
@@ -239,3 +261,4 @@ output %>%
   
 ```
 
+From the plot above, we can conclude that city "Richmond, VA" has the lowest proportion of unsolved homicides, while city "Chicago,IL" has the highest unsolved proportion of unsolved homicides. "Nwe York, NY" is ranking 13 lowest city.
